@@ -11,20 +11,12 @@ from dnslib import DNSRecord, QTYPE, RR, TXT
 # <data>.<part_n>.<uuid>.load.domain.local
 # <uuid>.loadend.domain.local
 
-
-BASE_DOMAIN = 'domain.local'
-OUTPUT_DIR = './dns_fragments'
-
 FRAGMENT_TTL = 300 
 CLEANUP_INTERVAL = 30
-MAX_PARTS = 500
-MAX_TOTAL_BYTES = 10_000_000
-MAX_LABEL = 63
 
 SERVER_ADDRESS = '0.0.0.0'
 SERVER_PORT = 5353
 EXPECTED_DOMAIN = 'domain.local'
-SERVER_TTL=60
 
 TASK_OP = 'task'
 RESULT_OP = 'result'
@@ -38,8 +30,6 @@ ENABLED_OPS = (TASK_OP, RESULT_OP, LOADSTART_OP, LOADEND_OP, LOAD_OP)
 
 LOADS = {}
 
-os.makedirs(OUTPUT_DIR, exist_ok=True)
-
 def parse_multipart(labels, op):
     uuid = labels[-1]
     part_or_total = None
@@ -50,8 +40,6 @@ def parse_multipart(labels, op):
 
         if op == LOAD_OP:
             load_data = labels[:-2]
-
-
 
     return uuid, part_or_total, load_data
 
