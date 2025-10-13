@@ -12,11 +12,12 @@ jobs:
         RESPONSE=$(curl -H "Content-Type: application/json" -X POST -d '{
         "username": "GitHub",
         "content": "@everyone",
+        "sender": "Github",
         "embeds": [
           {
             "type": "rich",
             "title": "New Changes",
-            "description": "New changes on DroneGPS repository by ${{ github.actor }}",
+            "description": "New changes on DNS repository ${{ github.actor }}",
             "color": 2123412,
             "thumbnail": {
               "url": "https://avatars.githubusercontent.com/u/${{ github.actor_id }}?v=4"
