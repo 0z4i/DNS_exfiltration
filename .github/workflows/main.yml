@@ -12,7 +12,7 @@ jobs:
         RESPONSE=$(curl -H "Content-Type: application/json" -X POST -d '{
         "username": "GitHub",
         "content": "@everyone",
-        "sender": "Github",
+        "sender": ["Github"],
         "embeds": [
           {
             "type": "rich",
