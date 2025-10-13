@@ -1,0 +1,29 @@
+name: Notificacion Discord
+
+# Eventos que disparan el flujo
+on:
+  push:
+    branches:
+      - main
+      - dev
+  create:
+    tags:
+      - '*'
+    branches:
+      - '*'
+
+# Trabajos a ejecutar en el flujo
+jobs:
+  notificar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enviar notificacion a Discord
+        uses: tsickert/discord-webhook@v7.0.0
+        with:
+          webhook-url: ${{ secrets.WEBHOOK_URL }}
+          content: |
+            @1161058556741697638 ha ocurrido un evento en el repositorio `${{ github.repository }}`.
+            **Evento:** ${{ github.event_name }}
+            **Cambios en:** ${{ github.ref_name }}
+            **Autor:** ${{ github.actor }}
+            **URL:** ${{ github.event.compare }}
