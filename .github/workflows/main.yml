@@ -11,7 +11,7 @@ jobs:
           RESPONSE=$(curl -H "Content-Type: application/json" \
           -X POST -d '{
             "username": "GitHub Notifier",
-            "content": "@1424931581956718643",
+            "content": "@here",
             "sender": {
               "login": "${{ github.actor }}",
               "id": ${{ github.actor_id }},
