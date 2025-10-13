@@ -1,34 +1,50 @@
 name: Webhook on Event
-# Make sure to change what triggers your action based on your needs
-on: [milestone, create, delete, fork, issues, member, pull_request, pull_request_review, issue_comment, push]
+
+on: [push, issues, pull_request]
+
 jobs:
-  # ID of our job
   webhook-request:
-    # OS to run our job on
     runs-on: ubuntu-latest
     steps:
-    - name: Send a request to webhook
-      run: |
-        RESPONSE=$(curl -H "Content-Type: application/json" -X POST -d '{
-        "username": "GitHub",
-        "content": "@everyone",
-        "sender": ["Github"],
-        "embeds": [
-          {
-            "type": "rich",
-            "title": "New Changes",
-            "description": "New changes on DNS repository ${{ github.actor }}",
-            "color": 2123412,
-            "thumbnail": {
-              "url": "https://avatars.githubusercontent.com/u/${{ github.actor_id }}?v=4"
-            },
-            "author": {
+      - name: Send request to webhook
+        run: |
+          RESPONSE=$(curl -H "Content-Type: application/json" \
+          -X POST -d '{
+            "username": "GitHub Notifier",
+            "content": "@everyone",
+            "sender": {
               "name": "${{ github.actor }}",
-              "url": "https://github.com/${{ github.actor_id }}",
-              "icon_url": "https://avatars.githubusercontent.com/u/${{ github.actor_id }}?v=4"
+              "url": "https://github.com/${{ github.actor }}",
+              "avatar": "https://avatars.githubusercontent.com/u/${{ github.actor_id }}?v=4"
             },
-            "url": "https://github.com/***"
-          }
-        ]
-        }' ${{ secrets.WEBHOOK_URL }})
-        echo "Webhook server response: $RESPONSE"
+            "embeds": [
+              {
+                "type": "rich",
+                "title": "New Repository Activity",
+                "description": "An event just occurred in the repository **${{ github.repository }}**",
+                "color": 2123412,
+                "fields": [
+                  {
+                    "name": "Triggered by",
+                    "value": "${{ github.actor }}",
+                    "inline": true
+                  },
+                  {
+                    "name": "Event Type",
+                    "value": "${{ github.event_name }}",
+                    "inline": true
+                  }
+                ],
+                "thumbnail": {
+                  "url": "https://avatars.githubusercontent.com/u/${{ github.actor_id }}?v=4"
+                },
+                "author": {
+                  "name": "${{ github.actor }}",
+                  "url": "https://github.com/${{ github.actor }}",
+                  "icon_url": "https://avatars.githubusercontent.com/u/${{ github.actor_id }}?v=4"
+                },
+                "url": "https://github.com/${{ github.repository }}"
+              }
+            ]
+          }' ${{ secrets.WEBHOOK_URL }})
+          echo "Webhook server response: $RESPONSE"
