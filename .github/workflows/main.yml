@@ -1,29 +1,33 @@
-name: Notificacion Discord
-
-# Eventos que disparan el flujo
-on:
-  push:
-    branches:
-      - main
-      - dev
-  create:
-    tags:
-      - '*'
-    branches:
-      - '*'
-
-# Trabajos a ejecutar en el flujo
+name: Webhook on Event
+# Make sure to change what triggers your action based on your needs
+on: [milestone, create, delete, fork, issues, member, pull_request, pull_request_review, issue_comment, push]
 jobs:
-  notificar:
+  # ID of our job
+  webhook-request:
+    # OS to run our job on
     runs-on: ubuntu-latest
     steps:
-      - name: Enviar notificacion a Discord
-        uses: tsickert/discord-webhook@v7.0.0
-        with:
-          webhook-url: ${{ secrets.WEBHOOK_URL }}
-          content: |
-            @1161058556741697638 ha ocurrido un evento en el repositorio `${{ github.repository }}`.
-            **Evento:** ${{ github.event_name }}
-            **Cambios en:** ${{ github.ref_name }}
-            **Autor:** ${{ github.actor }}
-            **URL:** ${{ github.event.compare }}
+    - name: Send a request to webhook
+      run: |
+        RESPONSE=$(curl -H "Content-Type: application/json" -X POST -d '{
+        "username": "GitHub",
+        "content": "@everyone",
+        "embeds": [
+          {
+            "type": "rich",
+            "title": "New Changes",
+            "description": "New changes on DroneGPS repository by ${{ github.actor }}",
+            "color": 2123412,
+            "thumbnail": {
+              "url": "https://avatars.githubusercontent.com/u/${{ github.actor_id }}?v=4"
+            },
+            "author": {
+              "name": "${{ github.actor }}",
+              "url": "https://github.com/${{ github.actor_id }}",
+              "icon_url": "https://avatars.githubusercontent.com/u/${{ github.actor_id }}?v=4"
+            },
+            "url": "https://github.com/***"
+          }
+        ]
+        }' ${{ secrets.WEBHOOK_URL }})
+        echo "Webhook server response: $RESPONSE"
