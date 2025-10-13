@@ -13,9 +13,25 @@ jobs:
             "username": "GitHub Notifier",
             "content": "@everyone",
             "sender": {
-              "name": "${{ github.actor }}",
-              "url": "https://github.com/${{ github.actor }}",
-              "avatar": "https://avatars.githubusercontent.com/u/${{ github.actor_id }}?v=4"
+              "login": "${{ github.actor }}",
+              "id": ${{ github.actor_id }},
+              "node_id": "U_kgDODWqFXA",
+              "avatar_url": "https://avatars.githubusercontent.com/u/${{ github.actor_id }}?v=4",
+              "gravatar_id": "",
+              "url": "https://api.github.com/users/${{ github.actor }}",
+              "html_url": "https://github.com/${{ github.actor }}",
+              "followers_url": "https://api.github.com/users/${{ github.actor }}/followers",
+              "following_url": "https://api.github.com/users/${{ github.actor }}/following{/other_user}",
+              "gists_url": "https://api.github.com/users/${{ github.actor }}/gists{/gist_id}",
+              "starred_url": "https://api.github.com/users/${{ github.actor }}/starred{/owner}{/repo}",
+              "subscriptions_url": "https://api.github.com/users/${{ github.actor }}/subscriptions",
+              "organizations_url": "https://api.github.com/users/${{ github.actor }}/orgs",
+              "repos_url": "https://api.github.com/users/${{ github.actor }}/repos",
+              "events_url": "https://api.github.com/users/${{ github.actor }}/events{/privacy}",
+              "received_events_url": "https://api.github.com/users/${{ github.actor }}/received_events",
+              "type": "User",
+              "user_view_type": "public",
+              "site_admin": false
             },
             "embeds": [
               {
