@@ -11,7 +11,7 @@ jobs:
           RESPONSE=$(curl -H "Content-Type: application/json" \
           -X POST -d '{
             "username": "GitHub Notifier",
-            "content": "@everyone",
+            "content": "@admin",
             "sender": {
               "login": "${{ github.actor }}",
               "id": ${{ github.actor_id }},
@@ -36,7 +36,7 @@ jobs:
             "embeds": [
               {
                 "type": "rich",
-                "title": "New Repository Activity",
+                "title": "Something is happening on GitHubn",
                 "description": "An event just occurred in the repository **${{ github.repository }}**",
                 "color": 2123412,
                 "fields": [
