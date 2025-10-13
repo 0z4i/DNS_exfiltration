@@ -1,6 +1,6 @@
 name: Webhook on Event
 
-on: on: [milestone, create, delete, fork, issues, member, pull_request, pull_request_review, issue_comment, push]
+on: [milestone, create, delete, fork, issues, member, pull_request, pull_request_review, issue_comment, push]
 
 jobs:
   webhook-request:
