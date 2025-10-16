@@ -26,10 +26,6 @@ EXPECTED_DOMAIN = "domain.local"
 AES_KEY = b"0123456789abcdef"
 IV_SIZE=16
 
-# SESSIONS = {}
-
-#DuW-hKd35ktRtLnfMTRLUBRgbuPqb3rJfL4qhcPI-6g.domain.local
-
 NO_TASK_RESPONSE = "[NOTHING]"
 
 def read_json_file(file_path):
