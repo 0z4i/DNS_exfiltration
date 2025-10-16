@@ -1,17 +1,15 @@
-import threading
 import time
-import base64
-import os
-from dnslib.server import DNSServer, BaseResolver
-from dnslib import DNSRecord, QTYPE, RR, TXT
 import json
-import datetime
-import uuid
+import base64
 import random
+import datetime
+import threading
 
 from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
 from Crypto.Util.Padding import pad, unpad
+from dnslib import DNSRecord, QTYPE, RR, TXT
+from dnslib.server import DNSServer, BaseResolver
 
 NO_TASK_RESPONSE = "[NOTHING]"
 SESSIONS_DATA = "./sessions.json"
@@ -20,7 +18,6 @@ SERVER_ADDRESS = "0.0.0.0"
 SERVER_PORT = 5353
 
 CLEANUP_INTERVAL = 30
-
 EXPECTED_DOMAIN = "domain.local"
 
 AES_KEY = b"0123456789abcdef"
