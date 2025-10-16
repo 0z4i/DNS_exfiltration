@@ -155,8 +155,6 @@ def take_callback(agent_id):
 
     return encoded_task
 
-# {"agent_id":"agent-uuid-0000","message_id":376943,"chunk_index":4,"size":674,"data":"b0MucHkKLXJ3LXJ3LXItLSAxIG11c2FzaGkgbXVzYXNoaSA5"}
-
 def assemble_data(message_data):
     chunks = message_data["chunks"]
     sorted_indexes = sorted(chunks.keys(), key=int)
