@@ -58,8 +58,8 @@ There are two types of requests sent by the client (agent) to the server.
 
 Each request type has its own data syntax, but both have the same request syntax, like the following:
 
-**Request syntax:** `<ba64_encoded_data>.<domain>`
-**Example:** `RG9uJ3QgZGVjb2RlIHRoYXQgYml0Y2gsIHRoaXMgaXMganVzdCBhIHNhbXBsZSA.domain.local`
+- **Request syntax:** `<ba64_encoded_data>.<domain>`
+- **Example:** `RG9uJ3QgZGVjb2RlIHRoYXQgYml0Y2gsIHRoaXMgaXMganVzdCBhIHNhbXBsZSA.domain.local`
 
 The request follows the DNS limitations and syntax:
 
