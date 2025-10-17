@@ -14,11 +14,11 @@ from dnslib.server import DNSServer, BaseResolver
 NO_TASK_RESPONSE = "[NOTHING]"
 SESSIONS_DATA = "./sessions.json"
 
-SERVER_ADDRESS = "0.0.0.0"
 SERVER_PORT = 5353
+SERVER_ADDRESS = "0.0.0.0"
+EXPECTED_DOMAIN = "domain.local"
 
 CLEANUP_INTERVAL = 30
-EXPECTED_DOMAIN = "domain.local"
 
 AES_KEY = b"0123456789abcdef"
 IV_SIZE=16

