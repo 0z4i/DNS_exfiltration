@@ -128,6 +128,12 @@ For every incoming request, check first for the `EXPECTED_DOMAIN`. If any reques
 
 All the requests are all answered in **TXT RECORDS** with also AES-encrypted and b64-encoded data, which is divided into chunks of 255 bytes or less to ensure TXT limits.
 
+
+
+https://github.com/user-attachments/assets/de01150a-861d-41c7-8a0d-3721d4506c53
+
+
+
 ---
 
 **⚠️⚠️⚠️ WARNING:** This repo is just a PoC, don't use for malicious purposes
